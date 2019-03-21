@@ -1,128 +1,177 @@
-
+import java.math.BigInteger;
 import java.sql.*;
-import java.util.Scanner;
+import java.util.Arrays;
 
 public class ConsoleApplication {
-	
 
   public static void main(String[] args) throws SQLException {
-	
     Connection connection = null;
     Statement statement = null;
-
     try {
       connection = initializeConnection();
       statement = connection.createStatement(ResultSet.TYPE_SCROLL_INSENSITIVE, ResultSet.CONCUR_READ_ONLY);
-      
-      interact(statement);
+
+      startApplication(statement);
+      // we now have the user's email - Page.userEmail
+
+
+
+      // todo: create THE MAIN PAGE - this page should persist, so we dont have to recreate it when going back to it
+
+      // todo: create SELECT PRODUCT CATEGORY PAGE - should persist too
+
+      // todo: create DISPLAY PRODUCTS PAGE - to keep it simple, we can just display all the products on 1 page
+
+      // todo: create VIEW CART PAGE
+
+      // todo: create PURCHASE HISTORY PAGE
+
+      // todo: create PURCHASE CART PAGE
+
+
+
+
+      // todo: create purchase
+
 
     } catch (Exception e) {
       e.printStackTrace();
     } finally {
       if (statement != null) statement.close();
       if (connection != null) connection.close();
-      log("DATABASE CONNECTION CLOSED");
+      Page.SCANNER.close();
     }
   }
-  
-  private static void interact(Statement statement) throws SQLException {
-	  Scanner sc = new Scanner(System.in);
-	  String input = "";
-	  while (true) {
-		  log("Please select an action to perform\n"
-		  		+ "SELECT:\t Select data from given databases\n"
-		  		+ "ADD:\t Add data to a database\n"
-		  		+ "UPDATE:\t Update existing data\n"
-		  		+ "DELETE:\t Delete existing data\n"
-		  		+ "QUIT:\t Exit session");
-		  input = sc.next().toUpperCase();
-		  
-		  switch (input) {
-		  case "QUIT":
-			  return;
-		  case "SELECT":
-			  select(statement, sc);
-		  case "ADD":
-			  add(statement, sc);
-		  case "UPDATE":
-			  update(statement, sc);
-		  case "DELETE":
-			  delete(statement, sc);
-		  }
-	  }
+
+  /**
+   * After this finishes, Page.userEmail is set
+   */
+  private static void startApplication(Statement statement) throws SQLException {
+    int loginPageResult = createStartPage(statement);
+    switch (loginPageResult) {
+      case 0: // login
+        createLoginPage(statement);
+        break;
+      case 1: // new user
+        createNewUserPage(statement);
+        break;
+    }
   }
-  
-  private static void select(Statement statement, Scanner sc) throws SQLException {
-	  try {
-		  log("Select a table.");
-		  String tableName = sc.next();
-		  log("Specify columns to query.");
-		  String columns = sc.next();
-		  log("Select a condition (put 'no' for no condition)");
-		  String condition = sc.next().toUpperCase();
-	  
-		  String querySQL = "SELECT " + columns + " from " + tableName + ";";
-		  if (!condition.equals("NO")) {
-			  querySQL = querySQL.substring(0, querySQL.length() - 1);
-			  querySQL += " WHERE " + condition + ";";
-		  } 
-		  System.out.println (querySQL);
-		  ResultSet rs = statement.executeQuery (querySQL);
-		  ResultSetMetaData rsmd = rs.getMetaData();
-		  int columnsNumber = rsmd.getColumnCount();
-		  
-		  while ( rs.next ( ) ) {
-			  
-			  for (int i = 1; i <= columnsNumber; i++) {
-			      if (i > 1) System.out.print(",  ");
-			      String columnValue = rs.getString(i);
-			      System.out.print(rsmd.getColumnName(i) + ":\t" + columnValue);
-			  }
-		      System.out.println();
-		      System.out.println("---------------------------------------------------------");
-		    }
-	  } catch (SQLException e) {
-			int sqlCode = e.getErrorCode(); // Get SQLCODE
-			String sqlState = e.getSQLState(); // Get SQLSTATE
-	                
-			System.out.println("Code: " + sqlCode + "  sqlState: " + sqlState);
-	    }
-	  
-	  
+
+  private static void createNewUserPage(Statement statement) {
+    final String NEW_USER_HEADER = "Input your information in the following order:\n" +
+                                   "<email> <password> <first_name> <last_name> <phone_number> <home_address>";
+    final String[] NEW_USER_OPTIONS = {};
+    final String NEW_USER_FOOTER = "eg. youremail2000@gmail.com yourpassword2000 john doe 1234567890 1234 street road";
+    Page newUserPage = new Page(NEW_USER_HEADER, NEW_USER_OPTIONS, NEW_USER_FOOTER);
+
+    String[] userInfo = newUserPage.tokenizeDisplayPage();
+    while (userInfo.length < 2) {
+      log("\nPlease add more information");
+      userInfo = newUserPage.tokenizeDisplayPage();
+    }
+
+    while (!insertNewUser(userInfo, 50 /* VARCHAR LIMIT */, statement)) {
+      log("\nInput invalid, try again");
+      userInfo = newUserPage.tokenizeDisplayPage();
+    }
+
+    Page.setUserEmail(userInfo[0]);
+    log("\nThanks for registering, your email is: " + Page.getUserEmail());
   }
-  
-  private static void add(Statement statement, Scanner sc) {
-	  // TODO
+
+  // todo: sanitize each token
+  private static boolean insertNewUser(String[] userInfo, int limit, Statement statement) {
+    String email = null, password = null, first_name = null, last_name = null, home_address = null;
+    BigInteger phone_number = null;
+
+    if (userInfo.length >= 5) {
+      try { phone_number = new BigInteger(userInfo[4]); }
+      catch (NumberFormatException e) { /* do nothing */ }
+      if (userInfo.length >= 6) {
+        home_address = "";
+        int i;
+        for (i = 4; i < userInfo.length - 1; i++)
+          home_address += userInfo[i] + " ";
+        home_address += userInfo[i];
+      }
+      userInfo = Arrays.copyOfRange(userInfo, 0, 4);
+    }
+
+    switch (userInfo.length) {
+      case 4:
+        last_name = userInfo[3];
+      case 3:
+        first_name = userInfo[2];
+      case 2:
+        email = userInfo[0];
+        password = userInfo[1];
+    }
+
+    final String PERSONTABLE = "person";
+    final String CUSTOMERTABLE = "customer";
+    String insertQuery =
+        "INSERT INTO " + PERSONTABLE +
+        " (email, password, first_name, last_name, phone_number, home_address) VALUES('" +
+        email + "', '" + password + "', " + (first_name == null ? "NULL" : "'" + first_name + "'") + ", " +
+        (last_name == null ? "NULL" : "'" + last_name + "'") + ", " + (phone_number == null ? "NULL" : phone_number) + ", " +
+        (home_address == null ? "NULL" : "'" + home_address + "'") + ");" +
+        "INSERT INTO " + CUSTOMERTABLE + " (email) VALUES('" + email + "');";
+    return DBQueryRunner.runQuery(insertQuery, statement);
   }
-  
-  private static void update(Statement statement, Scanner sc) {
-	  // TODO
+
+  private static void createLoginPage(Statement statement) throws SQLException {
+    final String LOGIN_PAGE_HEADER = "Input your email and password";
+    final String[] LOGIN_PAGE_OPTIONS = {};
+    final String LOGIN_PAGE_FOOTER = "eg. youremail2000@gmail.com yourpassword2000";
+    Page loginPage = new Page(LOGIN_PAGE_HEADER, LOGIN_PAGE_OPTIONS, LOGIN_PAGE_FOOTER);
+
+    String[] userAndPass = loginPage.tokenizeDisplayPage(2);
+    while (!validateLogin(userAndPass, statement))
+      userAndPass = loginPage.tokenizeDisplayPage(2);
+    Page.setUserEmail(userAndPass[0]);
   }
-  
-  private static void delete(Statement statement, Scanner sc) {
-	  // TODO
+
+  /**
+   * test with: johndoe@gmail.com 1234!
+   */
+  private static boolean validateLogin(String[] userAndPass, Statement statement) throws SQLException {
+    final String USER = userAndPass[0];
+    final String PASS = userAndPass[1];
+    final String TABLENAME = "person";
+
+    String selectQuery = "SELECT email, person FROM " + TABLENAME +
+                         " WHERE email='" + USER + "' AND password='" + PASS + "';";
+    ResultSet resultSet = DBQueryRunner.getSelection(selectQuery, statement);
+    if (resultSet.next()) {
+      log("\nLogin success, Welcome to Scamazon");
+      return true;
+    }
+
+    log("\nIncorrect login, try again");
+    return false;
+  }
+
+  private static int createStartPage(Statement statement) {
+    final String START_PAGE_HEADER = "Login or Create a new user";
+    final String[] START_OPTIONS = { "Login", "Create new user" };
+    Page startPage = new Page(START_PAGE_HEADER, START_OPTIONS);
+
+    return startPage.displayPageWrapper();
   }
 
   private static Connection initializeConnection() {
     final String DATABASE_URL = System.getenv("COMP421_URL");
     final String DATABASE_USER = System.getenv("COMP421_USER");
     final String DATABASE_PASS = System.getenv("COMP421_PASS");
-    
-	Scanner sc = new Scanner(System.in);
-	// Verify user
-	log("Please enter the password for cs421g30");
-	String pass = sc.next();
-	
-	if (!pass.equals(DATABASE_PASS)) return null;
-    
+
     Connection connection = null;
     try {
       DriverManager.registerDriver(new org.postgresql.Driver());
       connection = DriverManager.getConnection(DATABASE_URL, DATABASE_USER, DATABASE_PASS);
-      log("CONNECTION SUCCESSFUL");
     } catch (Exception e) {
       e.printStackTrace();
-      log("TERMINATING PROGRAM");
+      log("DB CONNECTION FAILED - EXITING");
       System.exit(0);
     }
     return connection;
