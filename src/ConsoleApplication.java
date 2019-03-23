@@ -233,7 +233,7 @@ public class ConsoleApplication {
       if (userInfo.length >= 6) {
         home_address = "";
         int i;
-        for (i = 4; i < userInfo.length - 1; i++)
+        for (i = 5; i < userInfo.length - 1; i++)
           home_address += userInfo[i] + " ";
         home_address += userInfo[i];
       }
