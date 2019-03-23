@@ -1,8 +1,19 @@
 import java.math.BigInteger;
 import java.sql.*;
+import java.text.DateFormat;
+import java.text.SimpleDateFormat;
+import java.util.Date;
+import java.util.ArrayList;
 import java.util.Arrays;
 
 public class ConsoleApplication {
+	
+	/*global to do:
+	 * need to make creating a customer default and not creating a person otherwise we wont be able to access the cust
+	 * properties (i.e having a cart, purchasing etc...)
+	 */
+	
+
 
   public static void main(String[] args) throws SQLException {
     Connection connection = null;
@@ -17,21 +28,67 @@ public class ConsoleApplication {
 
 
       // todo: create THE MAIN PAGE - this page should persist, so we dont have to recreate it when going back to it
-
-      // todo: create SELECT PRODUCT CATEGORY PAGE - should persist too
-
-      // todo: create DISPLAY PRODUCTS PAGE - to keep it simple, we can just display all the products on 1 page
-
-      // todo: create VIEW CART PAGE
-
-      // todo: create PURCHASE HISTORY PAGE
-
-      // todo: create PURCHASE CART PAGE
-
-
-
-
-      // todo: create purchase
+      //main page should: ask the user for commands i.e: either display a category, display a product, view the cart, 
+      //view purchase history, view purchase cart page
+      String sqlSelect="";
+      ResultSet rs = null;
+      
+      boolean quit = false;
+      while(!quit){
+    	  
+    	  int userInput= 0;
+    	 
+		  //persisting main page and asking user for options:
+		  userInput = displayMainPage(statement);
+    	  
+    	  switch(userInput){
+    	  
+    	  	case 0:
+    	  		sqlSelect = "SELECT product_name FROM product WHERE category = 'tablet';";
+    	  		log("\n\nHere are all the tablets at Scamazon.\n\n");
+    	  		
+    	  		rs = DBQueryRunner.getSelection(sqlSelect, statement);
+    	  		String selectedProduct = displayAndSelectProduct(rs, statement);
+    	  		displayBuyProduct(selectedProduct, statement);
+    	  		break;
+    	  	case 1:
+    	  		sqlSelect = "SELECT product_name FROM product WHERE category = 'laptop';";
+    	  		log("\n\nHere are all the laptops at Scamazon.\n\n");
+    	  		
+    	  		rs = DBQueryRunner.getSelection(sqlSelect, statement);
+    	  		String selectedProduct2 =displayAndSelectProduct(rs, statement);
+    	  		displayBuyProduct(selectedProduct2, statement);
+    	  		break;
+    	  	case 2:
+    	  		sqlSelect = "SELECT product_name FROM product WHERE category = 'desktop';";
+    	  		log("\n\nHere are all the desktops at Scamazon.\n\n");
+    	  		
+    	  		rs = DBQueryRunner.getSelection(sqlSelect, statement);
+    	  		String selectedProduct3 =displayAndSelectProduct(rs, statement);
+    	  		displayBuyProduct(selectedProduct3, statement);
+    	  		break;
+    	  	case 3:
+    	  		sqlSelect = 
+    	  		"SELECT pr.product_name, pu.date FROM purchases pu"
+    	  		+ " JOIN updates u ON pu.cart_id=u.cart_id"
+    	  		+ " JOIN cartitem c ON c.cartitem_id=u.cartitem_id"
+    	  		+ " JOIN product pr ON pr.product_id=c.product_id"
+    	  		+ " WHERE pu.email='" + Page.getUserEmail() + "';";
+    	  		
+    	  		
+    	  		rs = DBQueryRunner.getSelection(sqlSelect, statement);
+    	  		log("\n\nHere is the purchase history for " + Page.getUserEmail() + ":\n\n");
+    	  		DBQueryRunner.logResultSet(rs);
+    	  		break;
+    	  	case 4:
+    	  		quit=true;
+    	  		log("Quitting app and loging out.");
+    	  		break;
+			  	// todo: create purchase
+    	  
+    	  		//case if cust wants to go back to main page
+    	  }
+      }
 
 
     } catch (Exception e) {
@@ -41,6 +98,91 @@ public class ConsoleApplication {
       if (connection != null) connection.close();
       Page.SCANNER.close();
     }
+  }
+  
+  private static void displayBuyProduct(String selectedProduct, Statement statement){
+	  String header = "Do you want to buy the product?";
+	  String[] options = {"Yes", "No"};
+	  
+	  Page buyProduct = new Page(header, options);
+	  
+	  int selection = buyProduct.displayPageWrapper();
+	  
+	  if (selection == 1) return;
+	  
+	  log("\n\nBuying product:\n\n");
+	  
+	  ResultSet carts = DBQueryRunner.getSelection("SELECT * FROM cart;", statement);
+	  int numCarts=0;
+	  try {
+		carts.last();
+		numCarts = carts.getRow();
+	
+	  
+		  String sqlCreateCart = "INSERT INTO cart VALUES ("+(numCarts + 1) +");";
+		  DBQueryRunner.runQuery(sqlCreateCart, statement);
+		  
+		  //fetching product id
+		  String sqlProdId = "SELECT product_id FROM product WHERE product_name='" + selectedProduct + "';";
+		  ResultSet pid = DBQueryRunner.getSelection(sqlProdId, statement);
+		  pid.next();
+		  String prodId= pid.getString(1);
+		  
+		  ResultSet cartitems = DBQueryRunner.getSelection("SELECT * FROM cartitem;", statement);
+		  cartitems.last();
+		  int numCartItems = cartitems.getRow();
+		  String sqlCreateCartitem = "INSERT INTO cartitem VALUES ("+(numCartItems+1) + ", " + prodId +", 1);";
+		  DBQueryRunner.runQuery(sqlCreateCartitem, statement);
+		  
+		  String sqlUpdate = "INSERT INTO updates VALUES ("+(numCarts+1) + ", "+(numCartItems+1) + ", '" + Page.getUserEmail() + "');";
+		  DBQueryRunner.runQuery(sqlUpdate, statement);
+		  
+		  String sqlQueryPayment = "SELECT card_number FROM payment_info purchases WHERE email='" + Page.getUserEmail() + "';";
+		  ResultSet payment = DBQueryRunner.getSelection(sqlQueryPayment, statement);
+		  payment.next();
+		  String paymentInfo = payment.getString(1);
+		  
+		  DateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd");
+		  Date date = new Date(); 
+		  String sqlPurchase = "INSERT INTO purchases VALUES("+ (numCarts+1) + ", " + paymentInfo + ", '" + Page.getUserEmail() + "', "+"DATE '"+  dateFormat.format(date) + "');";
+		  DBQueryRunner.runQuery(sqlPurchase, statement);
+		  
+		  
+		  
+	  } catch (SQLException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+	  }
+  }
+  
+  private static String displayAndSelectProduct(ResultSet rs,Statement statement) {
+	  try {
+		String header = "Which product would you like to see?";
+		ArrayList<String> productNames = new ArrayList<>();
+		
+		while (rs.next()) {
+			productNames.add(rs.getString(1));
+		}
+		
+		String[] options = new String[productNames.size()];
+		Page selectProduct = new Page(header, productNames.toArray(options));
+	
+		int index = selectProduct.displayPageWrapper();
+		
+		String selectedProductName = productNames.get(index);
+		String sqlQuery = "SELECT product_name, price, category, cname FROM product WHERE product_name='" + selectedProductName + "';";
+		ResultSet rs2 = DBQueryRunner.getSelection(sqlQuery, statement);
+		
+		log("\n\nThis is your selected product\n\n");
+		DBQueryRunner.logResultSet(rs2);
+		return selectedProductName;
+		
+		
+	} catch (SQLException e) {
+		// TODO Auto-generated catch block
+		e.printStackTrace();
+	}
+	  return null;
   }
 
   /**
@@ -110,6 +252,9 @@ public class ConsoleApplication {
 
     final String PERSONTABLE = "person";
     final String CUSTOMERTABLE = "customer";
+    
+    		
+    		
     String insertQuery =
         "INSERT INTO " + PERSONTABLE +
         " (email, password, first_name, last_name, phone_number, home_address) VALUES('" +
@@ -117,7 +262,14 @@ public class ConsoleApplication {
         (last_name == null ? "NULL" : "'" + last_name + "'") + ", " + (phone_number == null ? "NULL" : phone_number) + ", " +
         (home_address == null ? "NULL" : "'" + home_address + "'") + ");" +
         "INSERT INTO " + CUSTOMERTABLE + " (email) VALUES('" + email + "');";
-    return DBQueryRunner.runQuery(insertQuery, statement);
+    
+    boolean result = DBQueryRunner.runQuery(insertQuery, statement);
+    
+  //inserting dummy payment info
+    String insertPaymentInfo = "INSERT INTO payment_info VALUES (1234567890, '" + email + "', 'VISA');";
+    DBQueryRunner.runQuery(insertPaymentInfo, statement);
+    
+    return result;
   }
 
   private static void createLoginPage(Statement statement) throws SQLException {
@@ -158,6 +310,17 @@ public class ConsoleApplication {
     Page startPage = new Page(START_PAGE_HEADER, START_OPTIONS);
 
     return startPage.displayPageWrapper();
+  }
+  
+  private static int displayMainPage(Statement statement){
+	  final String MAIN_PAGE_HEADER = "What would you like to do?";
+	  final String[] MAIN_OPTIONS = {"Display tablets", "Display laptops", "Display desktops", 
+			 "View purchase history", "Quit"};
+	  Page mainPage = new Page(MAIN_PAGE_HEADER, MAIN_OPTIONS);
+	  
+	  int result = mainPage.displayPageWrapper();
+	  
+	  return result;
   }
 
   private static Connection initializeConnection() {

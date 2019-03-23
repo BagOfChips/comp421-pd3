@@ -55,6 +55,8 @@ public class DBQueryRunner {
       logSqlException(e);
     }
   }
+  
+  
 
   public static boolean logSqlException(SQLException e) {
     boolean ignoreSqlWarnings = ignoreSqlWarnings(e);

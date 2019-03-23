@@ -5,3 +5,5 @@ out/*
 bin/*
 .classpath
 .project
+/bin/
+*.log
